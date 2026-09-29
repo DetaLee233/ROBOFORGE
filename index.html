@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROBOFORGE · 机甲工坊 5v5 PVE</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230a0e14'/%3E%3Crect x='3' y='3' width='10' height='10' rx='2' fill='none' stroke='%234fd1ff' stroke-width='1.5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="loading">正在启动引擎…</div>
+
+<canvas id="gl"></canvas>
+
+<!-- ===================== 机库 / 主页面 ===================== -->
+<div id="screen-hangar" class="screen">
+  <div class="hangar-brand">
+    <div class="brand-title">ROBOFORGE</div>
+    <div class="brand-sub">机 甲 工 坊 · 5 v 5 P V E</div>
+  </div>
+
+  <div class="hangar-card" id="hangar-info">
+    <div class="card-row"><span>载具名称</span><b id="hi-name">—</b></div>
+    <div class="card-row"><span>方块</span><b id="hi-blocks">0</b></div>
+    <div class="card-row"><span>武器</span><b id="hi-guns">0</b></div>
+    <div class="card-row"><span>车轮</span><b id="hi-wheels">0</b></div>
+    <div class="card-row"><span>模块</span><b id="hi-modules">0</b></div>
+    <div class="card-row"><span>总生命值</span><b id="hi-hp">0</b></div>
+    <div class="card-row"><span>点数消耗</span><b id="hi-cost">0 / 2000</b></div>
+  </div>
+
+  <div class="hangar-actions">
+    <button id="btn-start" class="btn btn-primary">开始游戏</button>
+    <button id="btn-edit"  class="btn">设计载具</button>
+    <button id="btn-library" class="btn">载具库</button>
+    <button id="btn-settings-hangar" class="btn">设置</button>
+  </div>
+
+  <div class="hangar-hint">鼠标拖拽旋转视角 · 滚轮缩放</div>
+</div>
+
+<!-- ===================== 载具编辑器 ===================== -->
+<div id="screen-editor" class="screen hidden">
+  <div class="editor-top" id="editor-status">点数 0 / 2000</div>
+
+  <div class="panel panel-left">
+    <h2>零件库</h2>
+    <div class="sym-row">
+      <span>对称建造</span>
+      <button id="sym-toggle" class="sym-btn">关</button>
+    </div>
+    <div id="palette"></div>
+    <h2>武器按键（拖动可交换）</h2>
+    <div id="key-slots" class="key-slots"></div>
+    <div class="hint">
+      添加带按键部件（武器 / 备用能源）会弹出按键绑定选择；一个按键只放一种<br>
+      拖动按键槽可互换绑定的武器<br>
+      对称建造开启后，放置/移除会镜像到另一侧（朝向同步）<br>
+      点击侧面可将部件安装到垂直平面（占用体以点击格为底面中心）<br>
+      左键放置 · 右键移除 · Delete 移除指向<br>
+      右键拖拽=旋转 · 滚轮=缩放 · WASD=平移
+    </div>
+  </div>
+
+  <div class="panel panel-right">
+    <h2>载具库</h2>
+    <div id="vehicle-library" class="btn-col"></div>
+    <h2>操作</h2>
+    <div class="btn-col">
+      <button id="ed-default" class="btn">载入基础载具</button>
+      <button id="ed-clear"   class="btn">清空</button>
+      <button id="ed-save"    class="btn">保存</button>
+      <button id="ed-export"  class="btn">导出 JSON</button>
+      <button id="ed-import"  class="btn">导入 JSON</button>
+      <button id="ed-copy"    class="btn">复制到下方文本框</button>
+      <button id="ed-back"    class="btn btn-primary">完成 / 返回</button>
+    </div>
+    <h2>载具 JSON</h2>
+    <textarea id="ed-json" spellcheck="false" placeholder="在此粘贴 JSON 后点击“导入 JSON”"></textarea>
+    <div id="ed-json-msg" class="msg"></div>
+  </div>
+</div>
+
+<!-- ===================== 战斗界面 ===================== -->
+<div id="screen-game" class="screen hidden">
+  <div id="hud">
+    <div class="hud-top">
+      <div class="score">
+        <span class="dot blue"></span><span id="score-blue">5</span>
+        <em>VS</em>
+        <span id="score-red">5</span><span class="dot red"></span>
+      </div>
+      <div id="objective">任务：消灭全部敌军</div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="bar-block">
+        <div class="bar-label">结构完整度</div>
+        <div class="bar health"><div class="fill" id="hud-hp"></div><span id="hud-hp-text">100%</span></div>
+      </div>
+      <div class="bar-block">
+        <div class="bar-label">武器能量</div>
+        <div class="bar energy"><div class="fill" id="hud-en"></div><span id="hud-en-text">1000</span></div>
+      </div>
+    </div>
+
+    <div class="hud-weapons" id="hud-weapons">
+      <div class="wslot" data-key="1"><b>1</b><span class="wname">—</span></div>
+      <div class="wslot" data-key="2"><b>2</b><span class="wname">—</span></div>
+      <div class="wslot" data-key="3"><b>3</b><span class="wname">—</span></div>
+    </div>
+    <div class="hud-modules" id="hud-modules"></div>
+    <div id="hud-mode" class="hidden">
+      <div class="hm-side blue"><span id="cap-blue">0%</span></div>
+      <div class="hm-points" id="cap-points"></div>
+      <div class="hm-side red"><span id="cap-red">0%</span></div>
+    </div>
+    <div id="hud-notice"></div>
+
+    <div id="crosshair">
+      <span class="ch-h"></span><span class="ch-v"></span>
+    </div>
+    <div id="grenade-sight" class="hidden">
+      <span class="gs-v"></span>
+      <span class="gs-h gs-top"></span>
+      <span class="gs-h gs-core"></span>
+      <span class="gs-h gs-low"></span>
+    </div>
+    <div id="cd-ring"></div>
+    <div id="hitmarker"></div>
+  </div>
+
+  <div id="banner" class="hidden"></div>
+
+  <div id="game-menu" class="hidden">
+    <div class="menu-inner">
+      <h1 id="gm-title">暂停</h1>
+      <p id="gm-sub"></p>
+      <button id="gm-resume" class="btn btn-primary">继续战斗</button>
+      <button id="gm-settings" class="btn">设置</button>
+      <button id="gm-restart" class="btn">重新开始</button>
+      <button id="gm-exit" class="btn">返回机库</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 载具库 ===================== -->
+<div id="screen-library" class="screen hidden">
+  <div class="library-head">
+    <h1>载具库</h1>
+    <div class="library-msg" id="library-msg"></div>
+    <button id="lib-back" class="btn">返回机库</button>
+  </div>
+  <div id="library-grid" class="library-grid"></div>
+</div>
+
+<!-- ===================== 武器按键绑定 ===================== -->
+<div id="bind-modal" class="screen hidden">
+  <div class="save-box">
+    <h1 id="bind-title">选择武器按键</h1>
+    <div id="bind-sub" class="msg"></div>
+    <div id="bind-options" class="bind-options"></div>
+    <div class="save-actions">
+      <button id="bind-cancel" class="btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 保存命名框 ===================== -->
+<div id="save-modal" class="screen hidden">
+  <div class="save-box">
+    <h1 id="save-title">保存到载具库</h1>
+    <input id="save-name" type="text" maxlength="24" placeholder="输入载具名称">
+    <div id="save-msg" class="msg"></div>
+    <div class="save-actions">
+      <button id="save-cancel" class="btn">取消</button>
+      <button id="save-confirm" class="btn btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 模式选择 ===================== -->
+<div id="mode-modal" class="screen hidden">
+  <div class="save-box">
+    <h1>选择战斗模式</h1>
+    <div class="mode-options">
+      <button class="btn mode-btn" data-mode="tdm">
+        <b>团队死斗</b><span>5 v 5 · 消灭全部敌军获胜</span>
+      </button>
+      <button class="btn mode-btn" data-mode="capture">
+        <b>夺点模式</b><span>占领三个得分点累积进度 · 或击破敌方基地八面体获胜</span>
+      </button>
+    </div>
+    <div class="save-actions">
+      <button id="mode-cancel" class="btn">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 设置 ===================== -->
+<div id="screen-settings" class="screen hidden">
+  <div class="settings-box">
+    <h1>设置</h1>
+    <div class="settings-group">
+      <label class="setting-row">
+        <span>反转鼠标上下</span>
+        <input type="checkbox" id="set-invertY">
+      </label>
+      <label class="setting-row">
+        <span>反转鼠标左右</span>
+        <input type="checkbox" id="set-invertX">
+      </label>
+      <label class="setting-row">
+        <span>反转键盘左右转向（A / D）</span>
+        <input type="checkbox" id="set-invertSteer">
+      </label>
+      <label class="setting-row">
+        <span>鼠标灵敏度</span>
+        <input type="range" id="set-sensitivity" min="0.4" max="3" step="0.1">
+      </label>
+    </div>
+    <div class="settings-actions">
+      <button id="set-reset" class="btn">恢复默认</button>
+      <button id="set-close" class="btn btn-primary">完成</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/core/events.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/core/config.js"></script>
+<script src="js/core/settings.js"></script>
+<script src="js/core/materials.js"></script>
+<script src="js/core/audio.js"></script>
+<script src="js/core/input.js"></script>
+<script src="js/core/orbitcam.js"></script>
+<script src="js/parts/part.js"></script>
+<script src="js/parts/block.js"></script>
+<script src="js/parts/reinforced.js"></script>
+<script src="js/parts/movementPart.js"></script>
+<script src="js/parts/wheel.js"></script>
+<script src="js/parts/track.js"></script>
+<script src="js/parts/leg.js"></script>
+<script src="js/parts/rotor.js"></script>
+<script src="js/parts/weapon.js"></script>
+<script src="js/parts/machinegun.js"></script>
+<script src="js/parts/grenade.js"></script>
+<script src="js/parts/railgun.js"></script>
+<script src="js/parts/computer.js"></script>
+<script src="js/parts/battery.js"></script>
+<script src="js/parts/registry.js"></script>
+<script src="js/vehicle/blueprint.js"></script>
+<script src="js/vehicle/vehicleLibrary.js"></script>
+<script src="js/vehicle/vehicle.js"></script>
+<script src="js/vehicle/projectile.js"></script>
+<script src="js/world/arena.js"></script>
+<script src="js/game/shield.js"></script>
+<script src="js/game/capture.js"></script>
+<script src="js/ai/aiController.js"></script>
+<script src="js/game/game.js"></script>
+<script src="js/ui/hangar.js"></script>
+<script src="js/ui/editor.js"></script>
+<script src="js/ui/hud.js"></script>
+<script src="js/ui/thumbnails.js"></script>
+<script src="js/ui/library.js"></script>
+<script src="js/ui/settings.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
