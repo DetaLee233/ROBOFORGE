@@ -201,6 +201,7 @@ class HUD {
     }
     if (this.el.gsight) this.el.gsight.classList.add('hidden');
     if (this.el.mode) this.el.mode.classList.add('hidden');
+    if (this.el.menuSelfDestruct) this.el.menuSelfDestruct.classList.add('hidden');
     if (this.el.cdRing) this.el.cdRing.style.setProperty('--cd', '0');
   }
 }

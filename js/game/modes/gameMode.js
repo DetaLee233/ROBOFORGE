@@ -57,6 +57,19 @@ class GameMode {
   repairObjectiveFor(vehicle) { return null; }
 
   /**
+   * ESC 暂停菜单配置（各模式可覆写，HUD 按此显示按钮）。
+   * 返回 { title, sub, canResume, selfDestruct, ... }；新模式可增删自己的按钮。
+   */
+  pauseMenu() {
+    return {
+      title: '暂停',
+      sub: '按 ESC 或“继续战斗”回到战场',
+      canResume: true,
+      selfDestruct: false,
+    };
+  }
+
+  /**
    * AI 自毁询问：无助（无法移动+无法攻击）或长期卡死时自毁重生于基地。
    * 返回 true 表示已执行。
    */

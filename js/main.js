@@ -200,10 +200,8 @@
         game.paused = !game.paused;
         if (game.paused) {
           if (input.locked) input.exitLock();
-          hud.showMenu({
-            title: '暂停', sub: '按 ESC 或“继续战斗”回到战场', canResume: true,
-            selfDestruct: game.modeName === 'capture',
-          });
+          // 暂停菜单按当前模式配置（如夺点模式才显示“自毁机体”）
+          hud.showMenu(game.mode ? game.mode.pauseMenu() : undefined);
         } else {
           hud.hideMenu();
         }

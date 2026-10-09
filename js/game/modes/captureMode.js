@@ -457,6 +457,14 @@ class CaptureMode extends GameMode {
 
   status() { return { mode: this.name, capture: this.snapshot() }; }
 
+  /** 夺点模式的暂停菜单带“自毁机体”（可回出生点复活） */
+  pauseMenu() {
+    return Object.assign(GameMode.prototype.pauseMenu.call(this), {
+      sub: '按 ESC 或“继续战斗”回到战场 · 自毁机体可回出生点复活',
+      selfDestruct: true,
+    });
+  }
+
   /* ---------------- AI 目标 ---------------- */
 
   /** 优先夺取非我方得分点；三点全归我方则守最近的点 */

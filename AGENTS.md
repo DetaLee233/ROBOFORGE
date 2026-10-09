@@ -56,9 +56,9 @@ js/ai/aiController.js AI driving/aiming: keeps engagement range, dodges incoming
 js/game/shield.js     `Shield` — reusable spherical faction barrier (allies pass, enemies blocked)
 js/game/capturePoint.js `CapturePoint` — scoring ring (capture/neutralise/progress arc)
 js/game/modes/gameMode.js `GameMode` — mode strategy interface (arena exclusions, spawn points, update,
-                      shields, projectile/beam barriers, checkEnd, status, AI objectives, self-destruct);
-                      Game only hosts generic match services (`replaceVehicle`, separation, projectiles,
-                      camera, HUD)
+                      shields, projectile/beam barriers, checkEnd, status, AI objectives, self-destruct,
+                      per-mode `pauseMenu()` config); Game only hosts generic match services (`replaceVehicle`,
+                      separation, projectiles, camera, HUD)
 js/game/modes/tdmMode.js    `TdmMode` — team deathmatch: arena spawns, elimination win, no respawn
 js/game/modes/captureMode.js `CaptureMode` + `CAPTURE` constants — "夺点" mode rules: base
                       octahedra/shields, end progress, 10s respawn, 3s base repair, `CaptureMode.zones`

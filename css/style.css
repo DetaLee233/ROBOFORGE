@@ -36,7 +36,7 @@ html,body{
 .screen{
   position:fixed; inset:0; z-index:10; pointer-events:none;
 }
-.screen.hidden{ display:none; }
+.hidden{ display:none !important; }
 .screen button, .screen textarea, .screen .panel, .screen .hangar-card{ pointer-events:auto; }
 
 /* ---------------- 通用按钮 ---------------- */
@@ -531,12 +531,12 @@ html,body{
 .btn-danger:hover{ box-shadow:0 0 18px rgba(255,92,92,.35); }
 
 /* ---------------- 保存 / 绑定 弹窗 ---------------- */
-#save-modal, #bind-modal{
+#save-modal, #bind-modal, #mode-modal{
   z-index:50; display:flex; align-items:center; justify-content:center;
   pointer-events:auto;
 }
-#save-modal.hidden, #bind-modal.hidden{ display:none; }
-#save-modal::before, #bind-modal::before{
+#save-modal.hidden, #bind-modal.hidden, #mode-modal.hidden{ display:none; }
+#save-modal::before, #bind-modal::before, #mode-modal::before{
   content:""; position:absolute; inset:0;
   background:rgba(4,8,14,.7); backdrop-filter:blur(6px);
 }
