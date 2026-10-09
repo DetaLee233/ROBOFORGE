@@ -16,7 +16,8 @@ class MovementPart extends Part {
     this.yOffset = -CELL / 2;       // 向下偏移半格
     this.groundClearance = 0;       // 格心到触地面距离
     this.groundExtend = 0;          // 网格底边之下延伸的（半）高度，用于贴地计算
-    this.pivot = false;             // 能否原地转向（履带）
+    this.pivot = false;             // 能否原地转向（履带/车轮）
+    this.pivotRate = 0;             // 原地转向速度系数（履带 0.85，车轮为其 80%）
     this.flying = false;            // 是否提供升力（旋翼）
     this.onGround = false;
   }

@@ -27,6 +27,7 @@ class Track extends MovementPart {
     this.steer = 0.85;                        // 履带转向略弱
     this.speedMul = 1;                        // 旧版车轮速度
     this.pivot = true;                        // 履带可原地转向
+    this.pivotRate = 0.85;                    // 原地转向速度系数（车轮取其 80%）
     this.yOffset = -CELL / 2;
     this.groundClearance = CELL / 2 + TRACK_RADIUS;
     this.groundExtend = TRACK_H * 0.5;

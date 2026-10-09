@@ -21,6 +21,8 @@ class Wheel extends MovementPart {
     this.radius = 1.35;
     this.drive = 1;
     this.steer = 1;
+    this.pivot = true;                        // 车轮可原地转向
+    this.pivotRate = 0.68;                    // 原地转向速度 = 履带(0.85) 的 80%
     this.speedMul = 2;                        // 速度 ×2
     this.yOffset = -CELL / 2;                 // 下移半格
     this.groundClearance = CELL / 2 + WHEEL_RADIUS;

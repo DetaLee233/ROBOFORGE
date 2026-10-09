@@ -124,7 +124,10 @@ Patterns: OOP entities, functional helpers on `Utils`, event-driven via `Bus` (`
   blocks rotate their face normals by `Utils.FACE_MATS[dir]` before neighbour culling.
 - Camera: third-person at `(topY|halfLength) + camOffset` blocks (wheel adjusts 5..10 blocks);
   view/aim strictly along `_camDir` (ground pitch up to ~1.15 rad) so looking up isn't flattened;
-  right mouse = ADS first-person zoom and makes own vehicle transparent.
+  mouse yaw is **free 360°** (`lookYaw` wrapped, not clamped) and the turret `_aimWeapons` yaw is unclamped,
+  so the player/AI can aim and fire backwards; right mouse = ADS first-person zoom + own vehicle transparent.
+- Movement: tracks `pivot = true` (`pivotRate 0.85`); wheels also `pivot = true` but at `pivotRate 0.68`
+  (80% of track) — `Vehicle.pivotTurnSpeed` is used when turning in place.
 
 ## Testing
 

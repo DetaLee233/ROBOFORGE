@@ -46,12 +46,25 @@ class Part {
     return mat;
   }
 
-  /** 多格放置体：把模型底面移动到指定高度（避免模型在占位体内悬空） */
+  /** 多格放置体：把模型底面移动到指定高度（避免模型在占位体内悬空）
+   *  注意在“父级局部坐标系”里计算下界——载具在世界中有位移/旋转时不能直接用世界包围盒。 */
   alignBottomTo(bottomY) {
     if (!this.mesh || this.footprint.length <= 1) return;
+    const parent = this.mesh.parent;
     this.mesh.updateMatrixWorld(true);
-    const bb = new THREE.Box3().setFromObject(this.mesh);
-    this.mesh.position.y += bottomY - bb.min.y;
+    const inv = new THREE.Matrix4();
+    if (parent) inv.copy(parent.matrixWorld).invert();
+    const rel = new THREE.Matrix4();
+    const box = new THREE.Box3();
+    this.mesh.traverse((o) => {
+      if (!o.geometry) return;
+      if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+      if (!o.geometry.boundingBox) return;
+      rel.multiplyMatrices(inv, o.matrixWorld);
+      box.union(o.geometry.boundingBox.clone().applyMatrix4(rel));
+    });
+    if (box.isEmpty()) return;
+    this.mesh.position.y += bottomY - box.min.y;
   }
 
   /** 子类实现：返回 THREE.Object3D */

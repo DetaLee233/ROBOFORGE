@@ -179,7 +179,8 @@ class AIController {
 
     // 开火（蓄力 / burst-rest 状态机见 _fire）
     const inRange = dist < maxRange * 0.95;
-    const aimed = Math.abs(angle) < 2.2;
+    // 炮塔可 360° 瞄准，车体朝向不再限制开火
+    const aimed = true;
     this._fire(dt, inRange, aimed, los, t);
   }
 

@@ -301,7 +301,7 @@ class Vehicle {
   }
 
   _computeMobility() {
-    let mass = 0, count = 0, steer = 0, sumMul = 0, clearance = 0, pivot = false, rating = 0;
+    let mass = 0, count = 0, steer = 0, sumMul = 0, clearance = 0, pivot = false, pivotRate = 0, rating = 0;
     let driveCount = 0, legCount = 0, rotorCount = 0, jump = false;
     for (const part of this.parts.values()) {
       mass += part.mass;
@@ -310,7 +310,7 @@ class Vehicle {
         sumMul += (part.speedMul || 1);
         rating += (part.driveRating || 1);
         clearance = Math.max(clearance, part.groundClearance || 0);
-        if (part.pivot) pivot = true;
+        if (part.pivot) { pivot = true; pivotRate = Math.max(pivotRate, part.pivotRate || 0); }
         if (part.isDrive) { driveCount++; steer += part.steer; }
         else if (part.flying) { rotorCount++; }
         else { legCount++; if (part.jump) jump = true; }
@@ -340,6 +340,8 @@ class Vehicle {
       Math.max(Config.THRUST_DIV_MIN, this.mass)) * avgMul;
     this.turnSpeed = Config.TURN_BASE * Utils.clamp(steer / Math.max(1, count), 0, 1) *
       (count > 0 ? 1 : Config.TURN_NO_WHEEL);
+    // 原地转向速度：由可原地转向部件的 pivotRate 决定（履带 0.85，车轮为其 80%）
+    this.pivotTurnSpeed = Config.TURN_BASE * Utils.clamp(pivotRate, 0, 1);
     this._computeRideHeight();
   }
 
@@ -460,7 +462,8 @@ class Vehicle {
       const horiz = Math.hypot(dx, dz);
       if (horiz < 1e-4 && Math.abs(dy) < 1e-4) continue;
 
-      const yaw = Utils.clamp(Math.atan2(dx, dz), -2.75, 2.75);
+      // 炮塔可 360° 旋转（不再限制在车头前方 180°），可打击背后目标
+      const yaw = Math.atan2(dx, dz);
       const pitch = Utils.clamp(Math.atan2(dy, horiz), -0.6, 1.4);   // 大仰角以打击空中目标
 
       w.aimYaw = (w.aimYaw === undefined)
@@ -539,7 +542,10 @@ class Vehicle {
       else if (moveInput !== 0) speedFactor = Math.max(speedFactor, 0.4);
       speedFactor *= (1 - Utils.clamp(Math.abs(this.speed) / (this.maxSpeed * 1.7), 0, 0.5));
       const dir = this.speed >= 0 ? 1 : -1;
-      this.heading -= this.steer * this.turnSpeed * speedFactor * dir * dt;
+      // 原地（几乎静止）转向走 pivotTurnSpeed：履带最快，车轮为其 80%
+      const pivoting = this.canPivot && moveInput === 0 && Math.abs(this.speed) < 0.5;
+      const turnRate = pivoting ? (this.pivotTurnSpeed || this.turnSpeed) : this.turnSpeed;
+      this.heading -= this.steer * turnRate * speedFactor * dir * dt;
     }
 
     this.position.x += fx * this.speed * dt;

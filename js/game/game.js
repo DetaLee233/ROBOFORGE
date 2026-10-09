@@ -441,7 +441,10 @@ class Game {
       p.moveZ = this.input.axis(Settings.key('back'), Settings.key('forward'));
     } else {
       if (this.input.locked) {
-        this.lookYaw = Utils.clamp(this.lookYaw + m.dx * sx, -1.4, 1.4);
+        // 允许 360° 自由视角（可瞄准并射击背后目标）
+        this.lookYaw += m.dx * sx;
+        while (this.lookYaw > Math.PI) this.lookYaw -= Math.PI * 2;
+        while (this.lookYaw < -Math.PI) this.lookYaw += Math.PI * 2;
       }
       p.throttle = this.input.axis(Settings.key('back'), Settings.key('forward'));
       let steer = this.input.axis(Settings.key('left'), Settings.key('right'));   // 右 = +1 -> 右转
