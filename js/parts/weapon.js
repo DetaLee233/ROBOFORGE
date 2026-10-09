@@ -74,14 +74,16 @@ class Weapon extends Part {
     const bl = opts.barrelLen || CELL * 0.9;
     const br = opts.barrelR || CELL * 0.12;
     const by = opts.barrelY || 0;
-    const barrel = new THREE.Mesh(
-      new THREE.CylinderGeometry(br * 0.85, br, bl, 12),
-      Materials.get('barrel', team)
-    );
-    barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, by, bs / 2 + bl / 2);
-    barrel.castShadow = true;
-    group.add(barrel);
+    if (!opts.noBarrel) {
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(br * 0.85, br, bl, 12),
+        Materials.get('barrel', team)
+      );
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, by, bs / 2 + bl / 2);
+      barrel.castShadow = true;
+      group.add(barrel);
+    }
 
     const muzzle = new THREE.Object3D();
     muzzle.position.set(0, by, bs / 2 + bl);

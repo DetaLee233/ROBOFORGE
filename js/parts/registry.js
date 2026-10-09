@@ -15,6 +15,7 @@ const PartRegistry = {
     machinegun: MachineGun,
     grenade: GrenadeLauncher,
     railgun: Railgun,
+    laser: EngineeringLaser,
     computer: BallisticsComputer,
     battery: BackupBattery,
   },
@@ -29,11 +30,12 @@ const PartRegistry = {
     machinegun: { name: '机枪',       cost: 80,  hp: 4000, mass: 3,   category: 'weapon',    swatch: '#5b6673', desc: '连射武器', footprint: Utils.boxFootprint(3) },
     grenade:    { name: '榴弹炮',     cost: 240, hp: 4800, mass: 5,   category: 'weapon',    swatch: '#4e6b3a', desc: '爆炸溅射', footprint: Utils.boxFootprint(3) },
     railgun:    { name: '充能射线炮', cost: 300, hp: 2000, mass: 6,   category: 'weapon',    swatch: '#6a5acd', desc: '蓄力光束·穿透', footprint: Utils.boxFootprint(3) },
+    laser:      { name: '工程激光',   cost: 100, hp: 4000, mass: 3,   category: 'weapon',    swatch: '#8affa0', desc: '射线·伤敌 80/疗友 150 每发', footprint: Utils.boxFootprint(3) },
     computer:   { name: '弹道计算机', cost: 100, hp: 500,  mass: 1,   category: 'module',    swatch: '#2f6f7a', desc: '能量-200 / 后坐·散布-50%', footprint: Utils.boxFootprint(3) },
     battery:    { name: '备用能源',   cost: 200, hp: 1000, mass: 2,   category: 'module',    keyed: true, swatch: '#7a5a2f', desc: '按键触发 +800 能量（带按键）', footprint: Utils.boxFootprint(3) },
   },
 
-  order: ['block', 'reinforced', 'wheel', 'track', 'leg', 'rotor', 'machinegun', 'grenade', 'railgun', 'computer', 'battery'],
+  order: ['block', 'reinforced', 'wheel', 'track', 'leg', 'rotor', 'machinegun', 'grenade', 'railgun', 'laser', 'computer', 'battery'],
 
   categories: [
     { id: 'structure', name: '结构' },

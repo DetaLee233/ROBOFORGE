@@ -50,6 +50,12 @@ const Config = {
   AI_RANGE_BASE: 55,        // 交战距离基准
   AI_RANGE_SPREAD: 35,      // 交战距离随机浮动
   AI_HOLD_DIST: 12,         // 驻守/到位判定距离
+  AI_BURST_MIN: 0.9,        // 连射时长下限（秒）
+  AI_BURST_VAR: 1.2,        // 连射时长浮动（秒）
+  AI_REST_MIN: 0.3,         // 停歇时长下限（秒）
+  AI_REST_VAR: 0.7,         // 停歇时长浮动（秒）
+  AI_ENERGY_FLOOR: 0.12,    // 能量低于该比例即停火
+  AI_STUCK_LIMIT: 8,        // AI 累计卡死超过该时长即自毁重生于基地（夺点）
   AI_SKILL_MIN: 0.6,        // 默认技能下限
   AI_SKILL_SPREAD: 0.4,     // 默认技能浮动
   AI_ALLY_SKILL: 0.6,       // 友军技能下限

@@ -22,12 +22,14 @@ class HUD {
       capBlue: document.getElementById('cap-blue'),
       capRed: document.getElementById('cap-red'),
       capPoints: document.getElementById('cap-points'),
+      capTimer: document.getElementById('cap-timer'),
       notice: document.getElementById('hud-notice'),
       banner: document.getElementById('banner'),
       menu: document.getElementById('game-menu'),
       menuTitle: document.getElementById('gm-title'),
       menuSub: document.getElementById('gm-sub'),
       menuResume: document.getElementById('gm-resume'),
+      menuSelfDestruct: document.getElementById('gm-self-destruct'),
     };
     this._slots = {};
     if (this.el.weapons) {
@@ -112,6 +114,13 @@ class HUD {
             (owner === 0 ? ' blue' : owner === 1 ? ' red' : '') +
             (cap.contested[i] ? ' contest' : '');
         }
+        if (this.el.capTimer && typeof cap.timeLeft === 'number') {
+          const t = Math.max(0, Math.ceil(cap.timeLeft));
+          const mm = String(Math.floor(t / 60)).padStart(2, '0');
+          const ss = String(t % 60).padStart(2, '0');
+          this.el.capTimer.textContent = mm + ':' + ss;
+          this.el.capTimer.classList.toggle('urgent', t <= 60);
+        }
       }
     }
 
@@ -158,6 +167,10 @@ class HUD {
     this.el.menuTitle.textContent = opts.title || '暂停';
     this.el.menuSub.textContent = opts.sub || '';
     this.el.menuResume.style.display = opts.canResume === false ? 'none' : 'block';
+    // 夺点模式提供“自毁机体”（无条件，自毁后按复活流程回基地）
+    if (this.el.menuSelfDestruct) {
+      this.el.menuSelfDestruct.classList.toggle('hidden', opts.selfDestruct !== true);
+    }
     this.el.menu.classList.remove('hidden');
   }
 

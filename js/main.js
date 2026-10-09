@@ -169,6 +169,17 @@
     input.requestLock();
   });
 
+  // 自毁机体（夺点模式）：无条件自毁，走复活流程回出生点
+  document.getElementById('gm-self-destruct').addEventListener('click', () => {
+    if (game.modeName !== 'capture') return;
+    const p = game.player;
+    if (!p || !p.alive) return;
+    game.paused = false;
+    hud.hideMenu();
+    if (input.locked) input.exitLock();
+    p._explode(null);
+  });
+
   document.getElementById('gm-restart').addEventListener('click', () => {
     startGame(lastMode);
   });
@@ -189,7 +200,10 @@
         game.paused = !game.paused;
         if (game.paused) {
           if (input.locked) input.exitLock();
-          hud.showMenu({ title: '暂停', sub: '按 ESC 或“继续战斗”回到战场', canResume: true });
+          hud.showMenu({
+            title: '暂停', sub: '按 ESC 或“继续战斗”回到战场', canResume: true,
+            selfDestruct: game.modeName === 'capture',
+          });
         } else {
           hud.hideMenu();
         }

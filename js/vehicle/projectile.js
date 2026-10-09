@@ -98,8 +98,8 @@ class Projectile {
     if (arena.hitCover(this.prev, this.pos)) {
       return this._impact(game, 'cover');
     }
-    // 基地护盾拦截 / 八面体受击
-    if (game.projectileBarrier && game.projectileBarrier(this)) {
+    // 模式屏障（护盾/基地目标）
+    if (game.mode && game.mode.blockProjectile && game.mode.blockProjectile(this, game)) {
       this.dead = true;
       return 'dead';
     }

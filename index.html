@@ -114,6 +114,7 @@
       <div class="hm-side blue"><span id="cap-blue">0%</span></div>
       <div class="hm-points" id="cap-points"></div>
       <div class="hm-side red"><span id="cap-red">0%</span></div>
+      <div class="hm-timer" id="cap-timer">20:00</div>
     </div>
     <div id="hud-notice"></div>
 
@@ -137,6 +138,7 @@
       <h1 id="gm-title">暂停</h1>
       <p id="gm-sub"></p>
       <button id="gm-resume" class="btn btn-primary">继续战斗</button>
+      <button id="gm-self-destruct" class="btn hidden">自毁机体</button>
       <button id="gm-settings" class="btn">设置</button>
       <button id="gm-restart" class="btn">重新开始</button>
       <button id="gm-exit" class="btn">返回机库</button>
@@ -219,8 +221,14 @@
         <input type="range" id="set-sensitivity" min="0.4" max="3" step="0.1">
       </label>
     </div>
+    <div class="settings-group">
+      <div class="setting-row key-head"><span>操作按键</span><span>点击修改</span></div>
+      <div id="set-keys"></div>
+      <div class="key-hint">鼠标类按键为默认输入设备，暂不可改；触屏 / 手柄适配后可替换输入源</div>
+    </div>
     <div class="settings-actions">
       <button id="set-reset" class="btn">恢复默认</button>
+      <button id="set-keys-reset" class="btn">重置按键</button>
       <button id="set-close" class="btn btn-primary">完成</button>
     </div>
   </div>
@@ -247,6 +255,7 @@
 <script src="js/parts/machinegun.js"></script>
 <script src="js/parts/grenade.js"></script>
 <script src="js/parts/railgun.js"></script>
+<script src="js/parts/laser.js"></script>
 <script src="js/parts/computer.js"></script>
 <script src="js/parts/battery.js"></script>
 <script src="js/parts/registry.js"></script>
@@ -256,7 +265,10 @@
 <script src="js/vehicle/projectile.js"></script>
 <script src="js/world/arena.js"></script>
 <script src="js/game/shield.js"></script>
-<script src="js/game/capture.js"></script>
+<script src="js/game/capturePoint.js"></script>
+<script src="js/game/modes/gameMode.js"></script>
+<script src="js/game/modes/tdmMode.js"></script>
+<script src="js/game/modes/captureMode.js"></script>
 <script src="js/ai/aiController.js"></script>
 <script src="js/game/game.js"></script>
 <script src="js/ui/hangar.js"></script>

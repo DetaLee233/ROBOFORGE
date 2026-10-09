@@ -64,15 +64,8 @@ class Game {
         if (vehicle) this.spawnExplosion(vehicle.position, Math.max(6, vehicle.boundingRadius));
         if (vehicle && vehicle.beamMesh) { this.scene.remove(vehicle.beamMesh); vehicle.beamMesh = null; }
         if (vehicle && vehicle.isPlayer) AudioFX.charge(false);
-        // 夺点模式：2 秒后在出生点复活
-        if (this.capture && vehicle) {
-          const ci = this.controllers.findIndex((c) => c.vehicle === vehicle);
-          this._respawns.push({
-            timer: CAPTURE.RESPAWN_TIME, vehicle, side: vehicle.side, isPlayer: !!vehicle.isPlayer,
-            bp: vehicle.bp, teamKey: vehicle.teamKey, name: vehicle.name,
-            skill: ci >= 0 ? this.controllers[ci].skill : Config.AI_RESPAWN_SKILL,
-          });
-        }
+        // 模式可接管：复活队列等
+        if (this.mode && vehicle) this.mode.onVehicleDestroyed(vehicle, this);
       }),
       Bus.on(EV.PART_DESTROYED, ({ vehicle, part }) => {
         if (!vehicle || !part || !part.mesh) return;
@@ -129,9 +122,9 @@ class Game {
   }
 
   _digitToKey(code) {
-    if (code === 'Digit1' || code === 'Numpad1') return 1;
-    if (code === 'Digit2' || code === 'Numpad2') return 2;
-    if (code === 'Digit3' || code === 'Numpad3') return 3;
+    if (code === Settings.key('weapon1')) return 1;
+    if (code === Settings.key('weapon2')) return 2;
+    if (code === Settings.key('weapon3')) return 3;
     return 0;
   }
 
@@ -181,16 +174,16 @@ class Game {
   start(playerBlueprint, mode) {
     this.dispose();
     this.playerBp = playerBlueprint;
-    this.mode = mode === 'capture' ? 'capture' : 'tdm';
     this.seed = (Math.random() * 1e6) | 0;
-    this._respawns = [];
+    this.modeName = mode === 'capture' ? 'capture' : 'tdm';
+    this.mode = this._createMode(this.modeName);
 
     this.arena = new Arena(this.scene, {
       half: 360,
       seed: this.seed,
-      exclusions: this.mode === 'capture' ? CaptureMode.zones(360) : null,
+      exclusions: this.mode.arenaExclusions(360),
     });
-    this.capture = this.mode === 'capture' ? new CaptureMode(this) : null;
+    this.mode.build(this.scene, this);
 
     this._spawnTeams();
     this.state = 'playing';
@@ -209,9 +202,14 @@ class Game {
     this._emitStatus();
   }
 
+  /** 模式注册：新增对局模式在此登记即可 */
+  _createMode(name) {
+    return name === 'capture' ? new CaptureMode(this) : new TdmMode(this);
+  }
+
   _spawnTeams() {
-    const playerPts = this.capture ? this.capture.spawnPoints(SIDE.PLAYER) : this.arena.spawnPoints(SIDE.PLAYER);
-    const enemyPts = this.capture ? this.capture.spawnPoints(SIDE.ENEMY) : this.arena.spawnPoints(SIDE.ENEMY);
+    const playerPts = this.mode.spawnPoints(this, SIDE.PLAYER);
+    const enemyPts = this.mode.spawnPoints(this, SIDE.ENEMY);
     const targetCost = Blueprint.computeCost(this.playerBp);
     const rng = Utils.mulberry32(this.seed ^ 0x1234abcd);
 
@@ -270,8 +268,7 @@ class Game {
   dispose() {
     for (const off of this._unsubs) off();
     this._unsubs.length = 0;
-    this._respawns = [];
-    if (this.capture) { this.capture.dispose(); this.capture = null; }
+    if (this.mode) { this.mode.dispose(); this.mode = null; }
     for (const v of this.vehicles) {
       if (v.beamMesh) this.scene.remove(v.beamMesh);
       v.dispose(this.scene);
@@ -316,15 +313,15 @@ class Game {
     this._updateCamera(dt);
     this._updatePlayerAim();
     for (const c of this.controllers) c.update(dt);
-    for (const v of this.vehicles) v.update(dt, this);
+    for (const v of this.vehicles) {
+      // 激光持续照射需要 dt 做能量流控 / 每秒伤害结算
+      v.update(dt, this, dt);
+    }
 
-    // 载具之间相互分离，避免重叠
+    // 载具之间相互分离，避免重叠；随后由模式处理屏障/规则
     this._separateVehicles();
-    this._resolveShields();
-
-    if (this.capture) this.capture.update(dt, this.vehicles);
-    this._updateRespawns(dt);
-    this._updateRepair(dt);
+    this.mode.resolveShields(this);
+    this.mode.update(dt, this);
 
     this.scene.updateMatrixWorld(true);
 
@@ -386,52 +383,8 @@ class Game {
     }
   }
 
-  /** 把敌方载具推出已开启的基地护盾（友方可穿过） */
-  _resolveShields() {
-    if (!this.capture) return;
-    for (const b of this.capture.basesList()) {
-      if (!b.shield.enabled) continue;
-      for (const v of this.vehicles) {
-        if (!v.alive || v.side === b.team) continue;
-        if (b.shield.pushOut(v.position, v.side, v.bodyRadius || Config.SEPARATION_RADIUS)) {
-          v._applyTransform(this.arena);
-        }
-      }
-    }
-  }
-
-  /** 夺点模式：处理复活队列 */
-  _updateRespawns(dt) {
-    if (!this.capture || !this._respawns || !this._respawns.length) return;
-    for (let i = this._respawns.length - 1; i >= 0; i--) {
-      const r = this._respawns[i];
-      r.timer -= dt;
-      if (r.timer > 0) continue;
-      this._respawns.splice(i, 1);
-      const pos = this._respawnPoint(r.side);
-      this._replaceVehicle(r.vehicle, r.bp, r.side, {
-        isPlayer: r.isPlayer, teamKey: r.teamKey, name: r.name, skill: r.skill,
-      }, pos, Math.atan2(-pos.x, -pos.z));
-    }
-  }
-
-  /** 选择离敌人最远的出生位，减少复活后被压制的概率 */
-  _respawnPoint(side) {
-    const pts = this.capture.spawnPoints(side);
-    let best = pts[0], bestD = -1;
-    for (const p of pts) {
-      let nearest = Infinity;
-      for (const v of this.vehicles) {
-        if (!v.alive || v.side === side) continue;
-        nearest = Math.min(nearest, p.distanceToSquared(v.position));
-      }
-      if (nearest > bestD) { bestD = nearest; best = p; }
-    }
-    return best.clone();
-  }
-
-  /** 用同蓝图的新机体替换旧机体（复活 / 出生点修复共用） */
-  _replaceVehicle(old, bp, side, meta, position, heading) {
+  /** 用同蓝图的新机体替换旧机体（复活 / 出生点修复共用，模式可调用） */
+  replaceVehicle(old, bp, side, meta, position, heading) {
     if (old) {
       const vi = this.vehicles.indexOf(old);
       if (vi >= 0) this.vehicles.splice(vi, 1);
@@ -454,70 +407,6 @@ class Game {
       this.controllers.push(new AIController(v, this, { skill: meta.skill }));
     }
     return v;
-  }
-
-  /** 夺点模式：在己方出生点停留 3 秒即完全修复（含重建被摧毁的零件） */
-  _updateRepair(dt) {
-    if (!this.capture) return;
-    const radius = CAPTURE.SPAWN_RADIUS * CELL;
-    for (const v of this.vehicles.slice()) {
-      if (!v.alive) continue;
-      const c = this.capture.baseCenter[v.side];
-      const damaged = v.currentHp() < v.totalMaxHp - 0.5 || v.parts.size < (v._fullParts || v.bp.parts.length);
-      const inside = c && v.position.distanceTo(c) <= radius;
-      if (!inside || !damaged) { v._repairTimer = 0; continue; }
-
-      v._repairTimer = (v._repairTimer || 0) + dt;
-      // 存活零件逐渐回血（3 秒回满）
-      const heal = dt / CAPTURE.REPAIR_TIME;
-      for (const part of v.parts.values()) {
-        if (part.hp < part.maxHp) part.hp = Math.min(part.maxHp, part.hp + part.maxHp * heal);
-      }
-      if (v._repairTimer >= CAPTURE.REPAIR_TIME) {
-        v._repairTimer = 0;
-        if (v.parts.size < (v._fullParts || v.bp.parts.length)) {
-          // 结构缺失：重建整机
-          this._replaceVehicle(v, v.bp, v.side, {
-            isPlayer: !!v.isPlayer, teamKey: v.teamKey, name: v.name, skill: Config.AI_RESPAWN_SKILL,
-          }, v.position.clone(), v.heading);
-          if (v.isPlayer) Bus.emit('hud:notice', { text: '机体已修复', key: 'repair' });
-        } else {
-          for (const part of v.parts.values()) part.hp = part.maxHp;
-          if (v.isPlayer) Bus.emit('hud:notice', { text: '机体已修复', key: 'repair' });
-        }
-      }
-    }
-  }
-
-  /**
-   * 子弹与基地的交互：击中敌方已开启护盾则被拦截；护盾解除后命中八面体则倒扣进度。
-   * @returns true 表示子弹被消耗
-   */
-  projectileBarrier(p) {
-    if (!this.capture) return false;
-    for (const b of this.capture.basesList()) {
-      if (b.team === p.team) continue;
-      const c = b.shield.center;
-      if (b.shield.enabled) {
-        if (Utils.segmentPointDistSq(p.prev, p.pos, c) <= b.shield.radius * b.shield.radius) {
-          this.spawnImpact(p.pos, 'cover');
-          return true;
-        }
-      } else if (b.everOwned && !b.destroyed) {
-        const octaPos = b.octa.position;
-        const r = (b.octaRadius || 4) + (p.scale || 1);
-        if (Utils.segmentPointDistSq(p.prev, p.pos, octaPos) <= r * r) {
-          this.capture.damageBase(b.team, p.damage);
-          this.spawnImpact(octaPos, 'part');
-          Bus.emit(EV.PROJECTILE_HIT, {
-            position: octaPos.clone(), target: null, source: p.owner,
-            part: null, damage: p.damage, lethal: false,
-          });
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   _updateRecoil(dt) {
@@ -546,16 +435,16 @@ class Game {
       if (this.input.locked) this.aimYaw += m.dx * sx;
       this.lookYaw = 0;
       p.heading = this.aimYaw;
-      let strafe = this.input.axis('KeyA', 'KeyD');
+      let strafe = this.input.axis(Settings.key('left'), Settings.key('right'));
       if (Settings.get('invertSteer')) strafe = -strafe;
-      p.moveX = -strafe;   // D = 向右（与轮式转向同一方向约定）
-      p.moveZ = this.input.axis('KeyS', 'KeyW');
+      p.moveX = -strafe;   // 右移（与轮式转向同一方向约定）
+      p.moveZ = this.input.axis(Settings.key('back'), Settings.key('forward'));
     } else {
       if (this.input.locked) {
         this.lookYaw = Utils.clamp(this.lookYaw + m.dx * sx, -1.4, 1.4);
       }
-      p.throttle = this.input.axis('KeyS', 'KeyW');
-      let steer = this.input.axis('KeyA', 'KeyD');   // D = +1 -> 右转
+      p.throttle = this.input.axis(Settings.key('back'), Settings.key('forward'));
+      let steer = this.input.axis(Settings.key('left'), Settings.key('right'));   // 右 = +1 -> 右转
       if (Settings.get('invertSteer')) steer = -steer;
       p.steer = steer;
     }
@@ -567,10 +456,10 @@ class Game {
       if (p.canFly) p.pitch = this.lookPitch;
     }
 
-    // 垂直控制：旋翼飞行（空格升 / Shift 降）或机械腿跳跃
+    // 垂直控制：旋翼飞行（升 / 降）或机械腿跳跃
     const down = (c) => (this.input.isDown ? this.input.isDown(c) : false);
-    const upKey = down('Space');
-    const downKey = down('ShiftLeft') || down('ShiftRight');
+    const upKey = down(Settings.key('up'));
+    const downKey = down(Settings.key('down')) || down('ShiftRight');
     if (p.canFly) {
       p.moveY = (upKey ? 1 : 0) - (downKey ? 1 : 0);
     } else {
@@ -790,21 +679,8 @@ class Game {
     const destroyed = [];
     const rArea = radius + 1.2;
     const rCenter = radius * 0.35 + 0.5;
-    // 基地护盾拦截光束 / 暴露的八面体受击
-    if (this.capture) {
-      for (const base of this.capture.basesList()) {
-        if (base.team === team) continue;
-        const c = base.shield.center;
-        if (base.shield.enabled) {
-          if (Utils.segmentPointDistSq(a, b, c) <= base.shield.radius * base.shield.radius) return;
-        } else if (base.everOwned && !base.destroyed) {
-          const r = (base.octaRadius || 4) + rArea;
-          if (Utils.segmentPointDistSq(a, b, base.octa.position) <= r * r) {
-            this.capture.damageBase(base.team, areaDmg + centerDmg);
-          }
-        }
-      }
-    }
+    // 模式屏障可拦截光束 / 处理基地受击
+    if (this.mode.blockBeam(a, b, radius, areaDmg, centerDmg, team, this)) return;
     for (const v of this.vehicles) {
       if (!v.alive || v.side === team) continue;
       for (const part of Array.from(v.parts.values())) {
@@ -838,10 +714,10 @@ class Game {
   }
 
   /** 光束特效：0.3s 淡出的圆柱 */
-  spawnBeamVFX(a, b, radius) {
+  spawnBeamVFX(a, b, radius, color) {
     const geo = new THREE.CylinderGeometry(Math.max(0.1, radius), Math.max(0.1, radius), 1, 12, 1, true);
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.9,
+      color: color || 0xffffff, transparent: true, opacity: 0.9,
       blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
     const mesh = new THREE.Mesh(geo, mat);
@@ -937,16 +813,8 @@ class Game {
 
   _checkEnd() {
     if (this.state !== 'playing') return;
-    if (this.capture) {
-      // 夺点模式：只有进度/八面体决定胜负（载具阵亡会复活）
-      if (this.capture.winner !== null) this._end(this.capture.winner === SIDE.PLAYER);
-      return;
-    }
-    const blue = this.aliveCount(SIDE.PLAYER);
-    const red = this.aliveCount(SIDE.ENEMY);
-
-    if (red === 0) this._end(true);
-    else if (blue === 0 || (this.player && !this.player.alive)) this._end(false);
+    const winner = this.mode.checkEnd(this);
+    if (winner !== null && winner !== undefined) this._end(winner === SIDE.PLAYER);
   }
 
   _end(win) {
@@ -1005,8 +873,8 @@ class Game {
       backupCooldown: p ? p.backupCooldown : 0,
       hasComputer: p ? (p.energyPenalty > 0) : false,
       grenadeSight,
-      mode: this.mode || 'tdm',
-      capture: this.capture ? this.capture.snapshot() : null,
+      mode: this.mode ? this.mode.name : 'tdm',
+      capture: this.mode ? this.mode.status().capture : null,
     });
   }
 

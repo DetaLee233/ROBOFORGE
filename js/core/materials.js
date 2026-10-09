@@ -19,6 +19,7 @@ const Materials = (() => {
     rotorRing:  { player: 0x4fd1ff, ally: 0x4fd1ff, enemy: 0xff8a7a, neutral: 0x4fd1ff },
     trackBelt:  { player: 0x1c2027, ally: 0x1c2027, enemy: 0x1c2027, neutral: 0x1c2027 },
     machinegun: { player: 0x3b4550, ally: 0x3b4550, enemy: 0x3b4550, neutral: 0x3b4550 },
+    laser:      { player: 0xff9d8f, ally: 0xff9d8f, enemy: 0xff9d8f, neutral: 0xff9d8f },
     grenade:    { player: 0x4e6b3a, ally: 0x4e6b3a, enemy: 0x6b4a3a, neutral: 0x4e6b3a },
     railgun:    { player: 0x4b4f6a, ally: 0x4b4f6a, enemy: 0x6a4b4b, neutral: 0x4b4f6a },
     railgunRail:{ player: 0x9fb0d8, ally: 0x9fb0d8, enemy: 0xd8a3a3, neutral: 0x9fb0d8 },

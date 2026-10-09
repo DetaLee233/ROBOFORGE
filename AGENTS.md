@@ -40,7 +40,7 @@ js/core/
   input.js            `Input` (keys/mouse/pointer-lock)
   orbitcam.js         `OrbitCam` (hangar/editor camera)
 js/parts/             Part <- Block/ReinforcedBlock, MovementPart <- Wheel/Track/Leg/Rotor,
-                      Weapon <- MachineGun/GrenadeLauncher, plus functional modules
+                      Weapon <- MachineGun/GrenadeLauncher/Railgun/EngineeringLaser, plus modules
 js/vehicle/
   blueprint.js        JSON schema, validate/normalize (+ per-key assignment), buildVehicle/grow
   vehicleLibrary.js   builtin + user-saved vehicles; randomNear(cost)
@@ -54,9 +54,16 @@ js/ai/aiController.js AI driving/aiming: keeps engagement range, dodges incoming
                       finish weak targets) instead of hull centre; in capture mode drives to objectives and
                       returns to base to repair when hurt.
 js/game/shield.js     `Shield` — reusable spherical faction barrier (allies pass, enemies blocked)
-js/game/capture.js    `CapturePoint` + `CaptureMode` — "夺点" mode: 3 mirror-symmetric capture points,
-                      base rings/octahedra/shields, progress accumulation, win logic (`CAPTURE` constants)
-js/game/game.js       match manager (`mode`: 'tdm' | 'capture'), camera (3rd person / ADS), HUD, explosions
+js/game/capturePoint.js `CapturePoint` — scoring ring (capture/neutralise/progress arc)
+js/game/modes/gameMode.js `GameMode` — mode strategy interface (arena exclusions, spawn points, update,
+                      shields, projectile/beam barriers, checkEnd, status, AI objectives, self-destruct);
+                      Game only hosts generic match services (`replaceVehicle`, separation, projectiles,
+                      camera, HUD)
+js/game/modes/tdmMode.js    `TdmMode` — team deathmatch: arena spawns, elimination win, no respawn
+js/game/modes/captureMode.js `CaptureMode` + `CAPTURE` constants — "夺点" mode rules: base
+                      octahedra/shields, end progress, 10s respawn, 3s base repair, `CaptureMode.zones`
+js/game/game.js       match manager (`modeName`: 'tdm' | 'capture'), camera (3rd person / ADS), HUD,
+                      explosions; delegates mode behaviour to `this.mode` (one `_createMode` registry)
 js/ui/                hangar, editor, library page, thumbnails, hud, settings panel
 ```
 
@@ -65,7 +72,7 @@ Patterns: OOP entities, functional helpers on `Utils`, event-driven via `Bus` (`
 ## Key gameplay constants
 
 - Budget 2000. Block 1/200hp, reinforced 3/400hp, wheel 30/1500, track 45/4500, leg 100/2000,
-  rotor 80/1500, MG 80/4000hp, grenade 240/4800hp, railgun 300/2000hp, computer 100/500, battery 200/1000.
+  rotor 80/1500, MG 80/4000hp, grenade 240/4800hp, railgun 300/2000hp, laser 100/4000hp, computer 100/500, battery 200/1000.
 - Weapon/module parts occupy a 3×3×3 grid footprint when building (models are 1.5–2.8 cells).
 - Weapons share one vehicle energy pool (`vehicle.weaponEnergy/MaxEnergy`, 1000, regen 100/s).
   Per-shot cost: MG 5.8 / 200 direct + 10 AOE (radius 0.75 cell); grenade 75 / 800 direct + AOE
@@ -75,9 +82,21 @@ Patterns: OOP entities, functional helpers on `Utils`, event-driven via `Bus` (`
 - Railgun (充能射线炮, 300): hold to charge (220 energy/s, 3s max), release fires a piercing beam
   (radius grows 0.15 → 1.5 cell with charge) hitting every vehicle along the ray; area dmg 10→400 plus
   centre 15→600; destroyed blocks 10% explode (3 cells, 50 friendly-fire). 1s cooldown, needs 1 gun.
+- Engineering laser (工程激光, 100): `weapon.beam` → `Vehicle._fireLasers` **continuous hitscan** (no drop,
+  no recoil, no volley cooldown — fires every frame while the group is held; `laserDt` param carries real dt).
+  Energy is flow-controlled (8 shots/s per gun × 5.8). Each gun owns a persistent `weapon.beamMesh`
+  (`Vehicle._setLaserBeam`) repositioned every frame — beam thickens ×2.2 while damaging/healing, extinguished
+  on cease-fire/switch/destruction (`extinguishLasers`). Stops at terrain/covers/vehicles/mode barriers
+  (`GameMode.beamStop` — shield blocks, exposed enemy octahedron takes the shot). Enemy part: 64 dmg/s-equivalent
+  (512 DPS/gun); friendly part: `Vehicle.repair` (rebuilds destroyed parts from the blueprint once enough
+  repair points accumulate, else heals the weakest surviving part; destroyed parts can't be healed directly).
+  Per-gun DPS = 512, heal 960/s; n guns scale linearly (ratePerGun = 8). Light-green (`0x9dffb0`) beam
+  mesh is parented to the **scene** (world space, like the railgun) and thickens ×2.2 while damaging/healing;
+  electric-hum loop `AudioFX.laser(on)`.
 - Fire rate: `Vehicle._fireWeapons` fires one ready weapon per tick at rate `fullRate * min(1, count/required)`
   (MG fullRate 26.7/s required 4; grenade 4/s required 2) — fewer guns = longer cooldown; more than required
-  adds no rate. Only `weapon.lobbed` (grenade) uses honeycomb cells (`Utils.hexOffsets`) and snaps the
+  adds no rate. `weapon.ratePerGun` (laser) overrides with linear scaling: n guns fire `ratePerGun × n` shots/s.
+  Only `weapon.lobbed` (grenade) uses honeycomb cells (`Utils.hexOffsets`) and snaps the
   aim point to terrain when near ground; direct-fire guns (MG, with its small hit AoE) aim at `aimPoint`.
 - Ballistics computer: shared energy max -200, recoil/spread -50% (no stacking). Battery: switch key
   adds +800 to the shared pool, 12s cooldown.
@@ -90,8 +109,15 @@ Patterns: OOP entities, functional helpers on `Utils`, event-driven via `Bus` (`
   octahedron (edge 3→8) + radius-30 `Shield` once owned. Holding all 3 points disables the enemy base shield,
   exposing its octahedron (progress ≤30% has a 30k hidden-HP buffer; damage is 1% = 1000 HP). Win at 100%
   progress or by destroying the enemy octahedron. Destroyed vehicles respawn at their base after 10s; a
-  damaged vehicle sitting in its base radius is fully repaired in 3s (`Game._updateRepair`). `CaptureMode.zones`
-  keeps arena covers/cliffs out of the objective areas.
+  damaged friendly vehicle inside a base's shield radius (30 cells) is healed by a **20× engineering repair
+  beam** fired from the base octahedron (heal-only, `CAPTURE.REPAIR_RATE`, restores destroyed parts via
+  `Vehicle.repair`). `CaptureMode.zones` keeps arena covers/cliffs out of the objective areas.
+- Capture extras: 20-min countdown (`MATCH_TIME`) — on expiry the higher progress wins (tie → more points →
+  player). When one side owns all 3 points the holder gains +5% progress per unit time and the other side
+  gets comeback buffs (dmg out ×1.05, dmg in ×0.95, speed ×1.05 via `vehicle.dmgOutMul/dmgInMul/speedBuff`);
+  buffs end as soon as the losing side retakes any point. Self-destruct (X key, player) / AI auto
+  (`aiSelfDestruct`) is allowed when the vehicle is helpless — `moveCount === 0 && weapons.length === 0` —
+  or, for AI, after `Config.AI_STUCK_LIMIT` seconds jammed; both route into the 10s respawn queue.
 - Matchmaking: `Game._spawnTeams` fills a shuffled "bag" of cost-near library blueprints (excluding the
   player's own), refilling when empty, so AI fleets stay diverse instead of cloning the player.
 - Blocks are full-cell (no gaps) and only render exposed faces (`culledBoxGeometry`); `dir`-mounted

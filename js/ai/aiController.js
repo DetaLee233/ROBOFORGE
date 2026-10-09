@@ -5,6 +5,28 @@
  *  机动：机械腿跳跃、旋翼飞行、武器分组切换
  * ========================================================= */
 
+/* 开火状态机：burst 连续射击 ↔ rest 间歇停顿（对象映射代替 if/else） */
+const AI_FIRE_STATES = {
+  burst: {
+    update(ai, dt, can, v) {
+      v.firing = can;
+      ai.burstTimer -= dt;
+      if (ai.burstTimer <= 0) {
+        ai.burstTimer = Config.AI_BURST_MIN + Math.random() * Config.AI_BURST_VAR;
+        ai.restTimer = Config.AI_REST_MIN + Math.random() * Config.AI_REST_VAR;
+        ai.fireState = 'rest';
+      }
+    },
+  },
+  rest: {
+    update(ai, dt, can, v) {
+      v.firing = false;
+      ai.restTimer -= dt;
+      if (ai.restTimer <= 0) ai.fireState = 'burst';
+    },
+  },
+};
+
 class AIController {
   constructor(vehicle, game, opts) {
     opts = opts || {};
@@ -14,12 +36,14 @@ class AIController {
     this.retargetTimer = 0;
     this.burstTimer = 0;
     this.restTimer = 0;
+    this.fireState = 'burst';   // 开火状态机当前状态
     this.jumpTimer = 2 + Math.random() * 4;
     this.grenadeCd = Math.random() * 2;
     this.underFire = false;
     this.underFireTimer = 0;
     this.dodge = 0;
     this.stuck = 0;
+    this.stuckTotal = 0;    // 累计卡死时长（真正脱困才清零）
     this.unstickT = 0;
     this.unstickDir = 1;
     this.aimPart = null;
@@ -67,8 +91,8 @@ class AIController {
     // 夺点模式：无掩体需求时朝目标机动；受伤则回出生点修复
     let navX = 0, navZ = 0, nav = seekingCover, hold = false;
     if (seekingCover) { navX = this.cover.x; navZ = this.cover.z; }
-    else if (this.game.capture) {
-      const obj = this._objectivePoint();
+    else {
+      const obj = this._objectivePoint();   // 模式目标（无目标模式返回 null）
       if (obj) {
         const od = Math.hypot(obj.x - v.position.x, obj.z - v.position.z);
         navX = obj.x; navZ = obj.z; nav = true;
@@ -153,26 +177,28 @@ class AIController {
     v.aimPoint.y += (Math.random() - 0.5) * spread;
     v.aimPoint.z += (Math.random() - 0.5) * spread;
 
-    // 开火 / 蓄力
+    // 开火（蓄力 / burst-rest 状态机见 _fire）
     const inRange = dist < maxRange * 0.95;
     const aimed = Math.abs(angle) < 2.2;
-    const isCharge = act.length > 0 && act[0].charge;
-    if (isCharge) {
+    this._fire(dt, inRange, aimed, los, t);
+  }
+
+  /** 开火调度：蓄力武器走 _aiCharge；普通武器走 burst/rest 状态机（对象映射） */
+  _fire(dt, inRange, aimed, los, t) {
+    const v = this.vehicle;
+    const act = v.activeWeapons();
+    if (act.length && act[0].charge) {
       this._aiCharge(dt, inRange, aimed, los, t);
-    } else {
-      if (this.restTimer > 0) {
-        this.restTimer -= dt;
-        v.firing = false;
-      } else {
-        v.firing = inRange && aimed && los;
-        this.burstTimer -= dt;
-        if (this.burstTimer <= 0) {
-          this.burstTimer = 0.9 + Math.random() * 1.2;
-          this.restTimer = 0.3 + Math.random() * 0.7;
-        }
-      }
-      if (v.weaponEnergy < v.weaponMaxEnergy * 0.12) v.firing = false;
+      return;
     }
+    const can = inRange && aimed && los && this._ammoReady(v);
+    const state = AI_FIRE_STATES[this.fireState] || AI_FIRE_STATES.burst;
+    state.update(this, dt, can, v);
+  }
+
+  /** 弹药/能量是否足够开火 */
+  _ammoReady(v) {
+    return v.weaponEnergy >= v.weaponMaxEnergy * Config.AI_ENERGY_FLOOR;
   }
 
   /** 充能射线炮：瞄准后蓄力一定时间再松开 */
@@ -282,13 +308,18 @@ class AIController {
   _unstick(dt) {
     const v = this.vehicle;
     const moving = v.omni ? (Math.abs(v.moveX) + Math.abs(v.moveZ) > 0.1) : (v.throttle !== 0);
-    if (Math.abs(v.speed) < 0.6 && moving) this.stuck += dt;
-    else this.stuck = 0;
+    const jammed = Math.abs(v.speed) < 0.6 && moving;
+    if (jammed) this.stuck += dt; else this.stuck = 0;
+    if (jammed) this.stuckTotal += dt; else this.stuckTotal = 0;
     if (this.stuck > 1.5) { this.stuck = 0; this.unstickT = 0.9; this.unstickDir = Math.random() < 0.5 ? -1 : 1; }
     if (this.unstickT > 0) {
       this.unstickT -= dt;
       if (v.omni) { v.moveZ = -1; v.moveX = this.unstickDir; }
       else { v.throttle = -1; v.steer = this.unstickDir; }
+    }
+    // 长期卡死：模式可让其自毁回出生点（夺点模式）
+    if (this.game.mode && this.game.mode.aiSelfDestruct) {
+      this.game.mode.aiSelfDestruct(v, dt, this.stuckTotal, this.game);
     }
   }
 
@@ -318,7 +349,7 @@ class AIController {
     let struct = 0, weapon = 0, move = 0;
     for (const part of t.parts.values()) {
       const ty = part.type;
-      if (ty === 'machinegun' || ty === 'grenade') weapon += part.hp;
+      if (ty === 'machinegun' || ty === 'grenade' || ty === 'laser') weapon += part.hp;
       else if (ty === 'wheel' || ty === 'track' || ty === 'leg' || ty === 'rotor') move += part.hp;
       else if (ty === 'block' || ty === 'reinforced') struct += part.hp;
     }
@@ -335,7 +366,7 @@ class AIController {
     const buckets = { structure: [], weapon: [], movement: [], any: [] };
     for (const part of t.parts.values()) {
       const ty = part.type;
-      if (ty === 'machinegun' || ty === 'grenade') buckets.weapon.push(part);
+      if (ty === 'machinegun' || ty === 'grenade' || ty === 'laser') buckets.weapon.push(part);
       else if (ty === 'wheel' || ty === 'track' || ty === 'leg' || ty === 'rotor') buckets.movement.push(part);
       else if (ty === 'block' || ty === 'reinforced') buckets.structure.push(part);
       buckets.any.push(part);
@@ -369,36 +400,15 @@ class AIController {
     return best;
   }
 
-  /** 夺点模式目标点：残血回出生点修复；否则优先夺取非我方得分点，全归我方则守最近点 */
+  /** 模式目标点：先问“是否应回基地修复”，再取模式的战术目标（无目标模式返回 null） */
   _objectivePoint() {
-    const cap = this.game.capture;
-    if (!cap) return null;
-    const my = this.vehicle.side;
-    const home = cap.baseCenter[my];
-
-    // 残血回出生点修复（带迟滞，回满后离开）
-    if (home) {
-      if (this._healing) {
-        if (this.vehicle.hpRatio() >= 0.95) this._healing = false;
-        else return home;
-      } else if (this.vehicle.hpRatio() < 0.55) {
-        this._healing = true;
-        return home;
-      }
+    const mode = this.game.mode;
+    if (!mode) return null;
+    if (mode.repairObjectiveFor) {
+      const heal = mode.repairObjectiveFor(this.vehicle);
+      if (heal) return heal;
     }
-
-    let best = null, bestD = Infinity;
-    for (const p of cap.points) {
-      if (p.owner === my) continue;
-      const d = p.position.distanceToSquared(this.vehicle.position);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    if (best) return best.position;
-    for (const p of cap.points) {
-      const d = p.position.distanceToSquared(this.vehicle.position);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    return best ? best.position : null;
+    return mode.objectiveFor ? mode.objectiveFor(this.vehicle) : null;
   }
 
   _avoidSteer() {

@@ -89,6 +89,38 @@ const AudioFX = (() => {
     }
   }
 
+  let laserNodes = null;
+  /** 工程激光：与射线炮蓄力同款电流声（独立节点，避免与充能互相打断） */
+  function laserSound(on) {
+    if (!enabled || !ensure()) return;
+    if (on) {
+      if (laserNodes) return;
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator(); osc.type = 'sawtooth'; osc.frequency.value = 68;
+      const osc2 = ctx.createOscillator(); osc2.type = 'square'; osc2.frequency.value = 136;
+      const filt = ctx.createBiquadFilter(); filt.type = 'bandpass'; filt.frequency.value = 900; filt.Q.value = 7;
+      const lfo = ctx.createOscillator(); lfo.frequency.value = 26;
+      const lfg = ctx.createGain(); lfg.gain.value = 700;
+      lfo.connect(lfg); lfg.connect(filt.frequency);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.5);
+      osc.connect(filt); osc2.connect(filt); filt.connect(g); g.connect(master);
+      osc.start(t); osc2.start(t); lfo.start(t);
+      laserNodes = { osc, osc2, lfo, g };
+    } else if (laserNodes) {
+      const t = ctx.currentTime;
+      const n = laserNodes;
+      laserNodes = null;
+      try {
+        n.g.gain.cancelScheduledValues(t);
+        n.g.gain.setValueAtTime(n.g.gain.value, t);
+        n.g.gain.linearRampToValueAtTime(0.0001, t + 0.12);
+        setTimeout(() => { try { n.osc.stop(); n.osc2.stop(); n.lfo.stop(); } catch (e) { /* */ } }, 220);
+      } catch (e) { /* */ }
+    }
+  }
+
   return {
     resume,
     setEnabled(v) { enabled = v; },
@@ -98,5 +130,6 @@ const AudioFX = (() => {
     ui() { tone(660, 0.05, 'sine', 0.15, 880); },
     empty() { tone(140, 0.08, 'square', 0.12, 80); },
     charge(on) { chargeSound(on); },
+    laser(on) { laserSound(on); },
   };
 })();
